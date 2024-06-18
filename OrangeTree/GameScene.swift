@@ -9,6 +9,25 @@ class GameScene: SKScene {
     var numOfLevels: UInt32 = 6
     var pathDots = [SKShapeNode]() // Array to hold the dot nodes
     let maxDragDistance: CGFloat = 150.0
+    var turn: UInt32 = 1
+    
+    var selectedNode: SKSpriteNode?
+    var token = 1
+    var touchStartTime: TimeInterval?
+    var isNodeReadyToMove = false {
+        didSet{
+            cancelIcon.isHidden = !isNodeReadyToMove
+        }
+    }
+    var initialNodePosition: CGPoint?
+    var cancelIcon: SKSpriteNode!
+    
+    var cameraNode = SKCameraNode()
+    var initialCameraPosition: CGPoint = .zero
+    var opponentCameraPosition: CGPoint = .zero
+    var orangeStoppedTime: TimeInterval?
+    var isOrangeShot = false
+    var canShoot = true
     
     // Class method to load .sks files
     static func Load(level: Int) -> GameScene? {
@@ -39,6 +58,23 @@ class GameScene: SKScene {
         sun.position.x = size.width - (sun.size.width * 0.75)
         sun.position.y = size.height - (sun.size.height * 0.75)
         addChild(sun)
+        
+        cancelIcon = SKSpriteNode(imageNamed: "cancelIcon")
+        cancelIcon.name = "cancelIcon"
+        cancelIcon.position = CGPoint(x: self.frame.midX, y: self.frame.midY)
+        cancelIcon.isHidden = true // Hide the cancel icon initially
+        addChild(cancelIcon)
+        
+        // Add the camera to the scene
+        addChild(cameraNode)
+        camera = cameraNode
+        
+        // Set the initial camera position to the left side of the screen
+        initialCameraPosition = CGPoint(x: size.width / 4, y: size.height / 2)
+        cameraNode.position = initialCameraPosition
+        
+        // Initialize the opponent camera position to the right side of the screen
+        opponentCameraPosition = CGPoint(x: 3 * size.width / 4, y: size.height / 2)
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -47,7 +83,7 @@ class GameScene: SKScene {
         let location = touch.location(in: self)
         
         // Check if the touch was on the Orange Tree
-        if atPoint(location).name == "tree" {
+        if let node = atPoint(location) as? SKSpriteNode,atPoint(location).name == "tree" {
             // Create the orange and add it to the scene at the touch location
             orange = Orange()
             orange?.physicsBody?.isDynamic =  false
@@ -56,6 +92,14 @@ class GameScene: SKScene {
             
             // Store the location of the touch
             touchStart = location
+            
+            // Reset the shot flag
+            isOrangeShot = false
+            
+            selectedNode = node
+            touchStartTime = touch.timestamp
+            isNodeReadyToMove = false
+            initialNodePosition = node.position
         }
         
         // Check whether the sun was tapped and change the level
@@ -78,28 +122,43 @@ class GameScene: SKScene {
         var location = touch.location(in: self)
         
         // Calculate the distance from touchStart to the current location
-        let dx = location.x - touchStart.x
-        let dy = location.y - touchStart.y
-        let distance = sqrt(dx*dx + dy*dy)
-        
-        // Check if the distance exceeds the maximum distance
-        if distance > maxDragDistance {
-            let angle = atan2(dy, dx)
-            location.x = touchStart.x + cos(angle) * maxDragDistance
-            location.y = touchStart.y + sin(angle) * maxDragDistance
+        if !isNodeReadyToMove{
+            let dx = location.x - touchStart.x
+            let dy = location.y - touchStart.y
+            let distance = sqrt(dx*dx + dy*dy)
+            
+            // Check if the distance exceeds the maximum distance
+            if distance > maxDragDistance {
+                let angle = atan2(dy, dx)
+                location.x = touchStart.x + cos(angle) * maxDragDistance
+                location.y = touchStart.y + sin(angle) * maxDragDistance
+            }
+            
+            // Update the position of the Orange to the current location
+            orange?.position = location
+            
+            // Show the predicted projectile path with dotted lines
+            showProjectilePath(start: touchStart, end: location)
+            
+            // Draw the firing vector
+            let path = UIBezierPath()
+            path.move(to: touchStart)
+            path.addLine(to: location)
+            shapeNode.path = path.cgPath
         }
         
-        // Update the position of the Orange to the current location
-        orange?.position = location
+        guard let node = selectedNode else { return }
+        if token <= 0 { return }
         
-        // Show the predicted projectile path with dotted lines
-        showProjectilePath(start: touchStart, end: location)
+        if !node.contains(location) {
+            touchStartTime = nil
+        }
         
-        // Draw the firing vector
-        let path = UIBezierPath()
-        path.move(to: touchStart)
-        path.addLine(to: location)
-        shapeNode.path = path.cgPath
+        if isNodeReadyToMove {
+            node.position.x = location.x
+            orange?.removeFromParent()
+            orange = nil
+        }
     }
     
     func showProjectilePath(start: CGPoint, end: CGPoint) {
@@ -152,15 +211,112 @@ class GameScene: SKScene {
         orange?.physicsBody?.isDynamic = true
         orange?.physicsBody?.applyImpulse(vector)
         
+        // Set the orange shot flag to true
+        isOrangeShot = true
+        
         // Remove the path from shapeNode
         shapeNode.path = nil
+        
+        // Add the turn
+        turn += 1
+        
+        // Disable shooting
+        canShoot = false
         
         // Remove any remaining dots
         for dot in pathDots {
             dot.removeFromParent()
         }
         pathDots.removeAll()
+        
+        guard let node = selectedNode, let initialPosition = initialNodePosition else {return}
+        
+        if cancelIcon.contains(location) {
+            node.position = initialPosition
+            isNodeReadyToMove = false
+            node.alpha = 1.0
+            touchStartTime = nil
+        }else{
+            if node.position != initialPosition && token > 0 {
+                //                token -= 1
+            }
+            node.alpha = 1.0
+        }
+        
+        selectedNode = nil
+        touchStartTime = nil
+        isNodeReadyToMove = false
     }
+    
+    override func update(_ currentTime: TimeInterval) {
+        // Update the camera position to follow the orange
+        if let orange = orange {
+            // Ensure the camera stays within the scene bounds
+            let cameraX = clamp(value: orange.position.x, lower: size.width / 4, upper: size.width - size.width / 4)
+            cameraNode.position = CGPoint(x: cameraX, y: size.height / 2)
+            
+            // Ensure the orange stays within the scene bounds
+            orange.position.x = clamp(value: orange.position.x, lower: orange.size.width / 2, upper: size.width - orange.size.width / 2)
+            orange.position.y = clamp(value: orange.position.y, lower: orange.size.height / 2, upper: size.height - orange.size.height / 2)
+            
+            // Check if the orange has stopped moving and has been shot
+            if isOrangeShot && orange.physicsBody?.velocity == CGVector(dx: 0, dy: 0) {
+                if orangeStoppedTime == nil {
+                    orangeStoppedTime = currentTime
+                } else if currentTime - orangeStoppedTime! > 0.2 {
+                    // After 0.2 second, move the camera back and remove the orange
+                    moveCameraAndRemoveOrange()
+                }
+            } else {
+                orangeStoppedTime = nil
+            }
+        }
+        
+        if let touchStartTime = touchStartTime, let node = selectedNode {
+            let touchDuration = currentTime - touchStartTime
+            
+            if touchDuration >= 3.0 && token > 0 {
+                isNodeReadyToMove = true
+                node.alpha = 0.5
+            }
+        }
+    }
+    
+    func moveCameraAndRemoveOrange() {
+        // Determine the new camera position based on the turn
+        let position: CGPoint = turn % 2 == 0 ? opponentCameraPosition : initialCameraPosition
+        let moveAction = SKAction.move(to: position, duration: 0.5)
+//        let zoomInAction = turn % 2 == 0 ? zoomInBottomRight() : zoomInBottomLeft()
+//        let groupAction = SKAction.group([moveAction, zoomInAction])
+        cameraNode.run(moveAction) { [weak self] in
+            // Remove the orange from the scene
+            self?.orange?.removeFromParent()
+            self?.orange = nil
+            self?.isOrangeShot = false // Reset the flag
+            
+            // Enable shooting again
+            self?.canShoot = true
+        }
+    }
+    
+    func zoomInBottomLeft() -> SKAction {
+        let scaleAction = SKAction.scale(to: 0.75, duration: 0.5)
+        let moveAction = SKAction.move(to: CGPoint(x: cameraNode.position.x - (size.width * 0.25), y: cameraNode.position.y - (size.height * 0.25)), duration: 0.5)
+        return SKAction.group([scaleAction, moveAction])
+    }
+    
+    func zoomInBottomRight() -> SKAction {
+        let scaleAction = SKAction.scale(to: 0.75, duration: 0.5)
+        let moveAction = SKAction.move(to: CGPoint(x: cameraNode.position.x + (size.width * 0.25), y: cameraNode.position.y - (size.height * 0.25)), duration: 0.5)
+        return SKAction.group([scaleAction, moveAction])
+    }
+    
+    func clamp(value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
+        return min(max(value, lower), upper)
+    }
+    
+    
+    
 }
 
 extension GameScene: SKPhysicsContactDelegate {
