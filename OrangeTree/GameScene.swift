@@ -25,8 +25,8 @@ class GameScene: SKScene {
     var cameraNode = SKCameraNode()
     var initialCameraPosition: CGPoint = .zero
     var opponentCameraPosition: CGPoint = .zero
-    var orangeStoppedTime: TimeInterval?
-    var isOrangeShot = false
+    var weaponStoppedTime: TimeInterval?
+    var isWeaponShot = false
     var canShoot = true
     
     // Class method to load .sks files
@@ -97,7 +97,7 @@ class GameScene: SKScene {
             touchStart = location
             
             // Reset the shot flag
-            isOrangeShot = false
+            isWeaponShot = false
             
             selectedNode = node
             touchStartTime = touch.timestamp
@@ -221,7 +221,7 @@ class GameScene: SKScene {
         orange?.physicsBody?.applyImpulse(vector)
         
         // Set the orange shot flag to true
-        isOrangeShot = true
+        isWeaponShot = true
         
         // Remove the path from shapeNode
         shapeNode.path = nil
@@ -259,25 +259,25 @@ class GameScene: SKScene {
     
     override func update(_ currentTime: TimeInterval) {
         // Update the camera position to follow the orange
-        if let orange = orange {
+        if let weapon = orange {
             // Ensure the camera stays within the scene bounds
-            let cameraX = clamp(value: orange.position.x, lower: size.width / 4, upper: size.width - size.width / 4)
+            let cameraX = clamp(value: weapon.position.x, lower: size.width / 4, upper: size.width - size.width / 4)
             cameraNode.position = CGPoint(x: cameraX, y: size.height / 2)
             
             // Ensure the orange stays within the scene bounds
-            orange.position.x = clamp(value: orange.position.x, lower: orange.size.width / 2, upper: size.width - orange.size.width / 2)
-            orange.position.y = clamp(value: orange.position.y, lower: orange.size.height / 2, upper: size.height - orange.size.height / 2)
+            weapon.position.x = clamp(value: weapon.position.x, lower: weapon.size.width / 2, upper: size.width - weapon.size.width / 2)
+            weapon.position.y = clamp(value: weapon.position.y, lower: weapon.size.height / 2, upper: size.height - weapon.size.height / 2)
             
             // Check if the orange has stopped moving and has been shot
-            if isOrangeShot && orange.physicsBody?.velocity == CGVector(dx: 0, dy: 0) {
-                if orangeStoppedTime == nil {
-                    orangeStoppedTime = currentTime
-                } else if currentTime - orangeStoppedTime! > 0.2 {
+            if isWeaponShot && weapon.physicsBody?.velocity == CGVector(dx: 0, dy: 0) {
+                if weaponStoppedTime == nil {
+                    weaponStoppedTime = currentTime
+                } else if currentTime - weaponStoppedTime! > 0.2 {
                     // After 0.2 second, move the camera back and remove the orange
-                    moveCameraAndRemoveOrange()
+                    moveCameraAndRemoveWeapon()
                 }
             } else {
-                orangeStoppedTime = nil
+                weaponStoppedTime = nil
             }
         }
         
@@ -291,7 +291,7 @@ class GameScene: SKScene {
         }
     }
     
-    func moveCameraAndRemoveOrange() {
+    func moveCameraAndRemoveWeapon() {
         // Determine the new camera position based on the turn
         let position: CGPoint = turn % 2 == 0 ? opponentCameraPosition : initialCameraPosition
         let moveAction = SKAction.move(to: position, duration: 0.5)
@@ -301,7 +301,7 @@ class GameScene: SKScene {
             // Remove the orange from the scene
             self?.orange?.removeFromParent()
             self?.orange = nil
-            self?.isOrangeShot = false // Reset the flag
+            self?.isWeaponShot = false // Reset the flag
             
             // Enable shooting again
             self?.canShoot = true
