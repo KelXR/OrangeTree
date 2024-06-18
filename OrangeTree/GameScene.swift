@@ -10,6 +10,17 @@ class GameScene: SKScene {
     var pathDots = [SKShapeNode]() // Array to hold the dot nodes
     let maxDragDistance: CGFloat = 150.0
     
+    var selectedNode: SKSpriteNode?
+    var token = 1
+    var touchStartTime: TimeInterval?
+    var isNodeReadyToMove = false {
+        didSet{
+            cancelIcon.isHidden = !isNodeReadyToMove
+        }
+    }
+    var initialNodePosition: CGPoint?
+    var cancelIcon: SKSpriteNode!
+    
     // Class method to load .sks files
     static func Load(level: Int) -> GameScene? {
         return GameScene(fileNamed: "Level-\(level)")
@@ -39,6 +50,12 @@ class GameScene: SKScene {
         sun.position.x = size.width - (sun.size.width * 0.75)
         sun.position.y = size.height - (sun.size.height * 0.75)
         addChild(sun)
+        
+        cancelIcon = SKSpriteNode(imageNamed: "cancelIcon")
+        cancelIcon.name = "cancelIcon"
+        cancelIcon.position = CGPoint(x: self.frame.midX, y: self.frame.midY)
+        cancelIcon.isHidden = true // Hide the cancel icon initially
+        addChild(cancelIcon)
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -47,7 +64,7 @@ class GameScene: SKScene {
         let location = touch.location(in: self)
         
         // Check if the touch was on the Orange Tree
-        if atPoint(location).name == "tree" {
+        if let node = atPoint(location) as? SKSpriteNode,atPoint(location).name == "tree" {
             // Create the orange and add it to the scene at the touch location
             orange = Orange()
             orange?.physicsBody?.isDynamic =  false
@@ -56,6 +73,11 @@ class GameScene: SKScene {
             
             // Store the location of the touch
             touchStart = location
+            
+            selectedNode = node
+            touchStartTime = touch.timestamp
+            isNodeReadyToMove = false
+            initialNodePosition = node.position
         }
         
         // Check whether the sun was tapped and change the level
@@ -78,28 +100,43 @@ class GameScene: SKScene {
         var location = touch.location(in: self)
         
         // Calculate the distance from touchStart to the current location
-        let dx = location.x - touchStart.x
-        let dy = location.y - touchStart.y
-        let distance = sqrt(dx*dx + dy*dy)
-        
-        // Check if the distance exceeds the maximum distance
-        if distance > maxDragDistance {
-            let angle = atan2(dy, dx)
-            location.x = touchStart.x + cos(angle) * maxDragDistance
-            location.y = touchStart.y + sin(angle) * maxDragDistance
+        if !isNodeReadyToMove{
+            let dx = location.x - touchStart.x
+            let dy = location.y - touchStart.y
+            let distance = sqrt(dx*dx + dy*dy)
+            
+            // Check if the distance exceeds the maximum distance
+            if distance > maxDragDistance {
+                let angle = atan2(dy, dx)
+                location.x = touchStart.x + cos(angle) * maxDragDistance
+                location.y = touchStart.y + sin(angle) * maxDragDistance
+            }
+            
+            // Update the position of the Orange to the current location
+            orange?.position = location
+            
+            // Show the predicted projectile path with dotted lines
+            showProjectilePath(start: touchStart, end: location)
+            
+            // Draw the firing vector
+            let path = UIBezierPath()
+            path.move(to: touchStart)
+            path.addLine(to: location)
+            shapeNode.path = path.cgPath
         }
         
-        // Update the position of the Orange to the current location
-        orange?.position = location
+        guard let node = selectedNode else { return }
+        if token <= 0 { return }
         
-        // Show the predicted projectile path with dotted lines
-        showProjectilePath(start: touchStart, end: location)
+        if !node.contains(location) {
+            touchStartTime = nil
+        }
         
-        // Draw the firing vector
-        let path = UIBezierPath()
-        path.move(to: touchStart)
-        path.addLine(to: location)
-        shapeNode.path = path.cgPath
+        if isNodeReadyToMove {
+            node.position.x = location.x
+            orange?.removeFromParent()
+            orange = nil
+        }
     }
     
     func showProjectilePath(start: CGPoint, end: CGPoint) {
@@ -160,7 +197,38 @@ class GameScene: SKScene {
             dot.removeFromParent()
         }
         pathDots.removeAll()
+        
+        guard let node = selectedNode, let initialPosition = initialNodePosition else {return}
+        
+        if cancelIcon.contains(location) {
+            node.position = initialPosition
+            isNodeReadyToMove = false
+            node.alpha = 1.0
+            touchStartTime = nil
+        }else{
+            if node.position != initialPosition && token > 0 {
+                //                token -= 1
+            }
+            node.alpha = 1.0
+        }
+        
+        selectedNode = nil
+        touchStartTime = nil
+        isNodeReadyToMove = false
     }
+    
+    override func update(_ currentTime: TimeInterval) {
+        if let touchStartTime = touchStartTime, let node = selectedNode {
+            let touchDuration = currentTime - touchStartTime
+            
+            if touchDuration >= 3.0 && token > 0 {
+                isNodeReadyToMove = true
+                node.alpha = 0.5
+            }
+        }
+    }
+    
+    
 }
 
 extension GameScene: SKPhysicsContactDelegate {
