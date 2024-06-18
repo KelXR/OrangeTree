@@ -1,11 +1,3 @@
-//
-//  GameScene.swift
-//  OrangeTree
-//
-//  Created by Bo on 5/19/19.
-//  Copyright © 2019 Make School. All rights reserved.
-//
-
 import SpriteKit
 
 class GameScene: SKScene {
@@ -15,6 +7,8 @@ class GameScene: SKScene {
     var shapeNode = SKShapeNode()
     var boundary = SKNode()
     var numOfLevels: UInt32 = 6
+    var pathDots = [SKShapeNode]() // Array to hold the dot nodes
+    let maxDragDistance: CGFloat = 150.0
     
     // Class method to load .sks files
     static func Load(level: Int) -> GameScene? {
@@ -45,7 +39,6 @@ class GameScene: SKScene {
         sun.position.x = size.width - (sun.size.width * 0.75)
         sun.position.y = size.height - (sun.size.height * 0.75)
         addChild(sun)
-        
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -77,18 +70,30 @@ class GameScene: SKScene {
                 }
             }
         }
-        
-        
-        
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Get the location of the touch
         let touch = touches.first!
-        let location = touch.location(in: self)
+        var location = touch.location(in: self)
+        
+        // Calculate the distance from touchStart to the current location
+        let dx = location.x - touchStart.x
+        let dy = location.y - touchStart.y
+        let distance = sqrt(dx*dx + dy*dy)
+        
+        // Check if the distance exceeds the maximum distance
+        if distance > maxDragDistance {
+            let angle = atan2(dy, dx)
+            location.x = touchStart.x + cos(angle) * maxDragDistance
+            location.y = touchStart.y + sin(angle) * maxDragDistance
+        }
         
         // Update the position of the Orange to the current location
         orange?.position = location
+        
+        // Show the predicted projectile path with dotted lines
+        showProjectilePath(start: touchStart, end: location)
         
         // Draw the firing vector
         let path = UIBezierPath()
@@ -97,15 +102,49 @@ class GameScene: SKScene {
         shapeNode.path = path.cgPath
     }
     
+    func showProjectilePath(start: CGPoint, end: CGPoint) {
+        // Remove any existing dots
+        for dot in pathDots {
+            dot.removeFromParent()
+        }
+        pathDots.removeAll()
+        
+        // Calculate the initial velocity based on the drag distance
+        let dx = (start.x - end.x) * 0.5
+        let dy = (start.y - end.y) * 0.5
+        let initialVelocity = CGVector(dx: dx, dy: dy)
+        
+        // Simulate the projectile path
+        let numberOfPoints = 6  // Number of points for the path
+        let timeStep: CGFloat = 0.3 // Time step for the simulation
+        
+        for i in 0..<numberOfPoints {
+            let t = timeStep * CGFloat(i)
+            let newPosition = CGPoint(
+                x: start.x + initialVelocity.dx * t,
+                y: start.y + initialVelocity.dy * t + 0.5 * physicsWorld.gravity.dy * t * t
+            )
+            
+            // Create a dot for the current position
+            let dot = SKShapeNode(circleOfRadius: 3)
+            dot.position = newPosition
+            dot.fillColor = UIColor.white
+            dot.strokeColor = UIColor.clear
+            addChild(dot)
+            
+            // Add the dot to the array
+            pathDots.append(dot)
+        }
+    }
+    
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Get the location of where the touch ended
         let touch = touches.first!
         let location = touch.location(in: self)
         
         // Get the difference between the start and end point as a vector
-        // New code
-        let dx = (touchStart.x - location.x) * 0.5
-        let dy = (touchStart.y - location.y) * 0.5
+        let dx = (touchStart.x - location.x) * 0.4
+        let dy = (touchStart.y - location.y) * 0.4
         
         let vector = CGVector(dx: dx, dy: dy)
         
@@ -115,6 +154,12 @@ class GameScene: SKScene {
         
         // Remove the path from shapeNode
         shapeNode.path = nil
+        
+        // Remove any remaining dots
+        for dot in pathDots {
+            dot.removeFromParent()
+        }
+        pathDots.removeAll()
     }
 }
 
@@ -139,4 +184,3 @@ extension GameScene: SKPhysicsContactDelegate {
         node.removeFromParent()
     }
 }
-
