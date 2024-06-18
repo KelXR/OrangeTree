@@ -78,6 +78,9 @@ class GameScene: SKScene {
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Only process touches if canShoot is true
+        guard canShoot else { return }
+        
         // Get the location of the touch on the screen
         let touch = touches.first!
         let location = touch.location(in: self)
@@ -117,6 +120,9 @@ class GameScene: SKScene {
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Only process touches if canShoot is true
+        guard canShoot else { return }
+        
         // Get the location of the touch
         let touch = touches.first!
         var location = touch.location(in: self)
@@ -197,6 +203,9 @@ class GameScene: SKScene {
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Only process touches if canShoot is true
+        guard canShoot else { return }
+        
         // Get the location of where the touch ended
         let touch = touches.first!
         let location = touch.location(in: self)
